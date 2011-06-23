@@ -6,7 +6,7 @@
 #define MOTHERBOARD 3 // ATMEGA168 = 0, SANGUINO = 1, MOTHERBOARD = 2, MEGA/RAMPS = 3, ATMEGA328 = 4, Gen6 = 5, Sanguinololu = 6
 
 //Comment out to disable SD support
-#define SDSUPPORT 1
+//#define SDSUPPORT 1
 
 //Min step delay in microseconds. If you are experiencing missing steps, try to raise the delay microseconds, but be aware this
 // If you enable this, make sure STEP_DELAY_RATIO is disabled.
@@ -24,15 +24,15 @@
 
 //Acceleration settings
 #ifdef RAMP_ACCELERATION
-float min_units_per_second = 35.0; // the minimum feedrate
-long max_acceleration_units_per_sq_second = 750; // Max acceleration in mm/s^2 for printing moves
-long max_travel_acceleration_units_per_sq_second = 1500; // Max acceleration in mm/s^2 for travel moves
+float min_units_per_second = 15.0; // the minimum feedrate
+long max_acceleration_units_per_sq_second = 200; // Max acceleration in mm/s^2 for printing moves
+long max_travel_acceleration_units_per_sq_second = 200; // Max acceleration in mm/s^2 for travel moves
 #endif
 #ifdef EXP_ACCELERATION
-float full_velocity_units = 10; // the units between minimum and G1 move feedrate
-float travel_move_full_velocity_units = 10; // used for travel moves
+float full_velocity_units = 400; // the units between minimum and G1 move feedrate
+float travel_move_full_velocity_units = 400; // used for travel moves
 float min_units_per_second = 35.0; // the minimum feedrate
-float min_constant_speed_units = 2; // the minimum units of an accelerated move that must be done at constant speed
+float min_constant_speed_units = .1; // the minimum units of an accelerated move that must be done at constant speed
                                     // Note that if the move is shorter than this value, acceleration won't be perfomed,
                                     // but will be done at the minimum between min_units_per_seconds and move feedrate speeds.
 #endif
@@ -86,12 +86,12 @@ float min_constant_speed_units = 2; // the minimum units of an accelerated move 
 // units are in millimeters or whatever length unit you prefer: inches,football-fields,parsecs etc
 
 //Calibration variables
-float x_steps_per_unit = 80.376;
-float y_steps_per_unit = 80.376;
-float z_steps_per_unit = 3200/1.25;
-float e_steps_per_unit = 16;
-float max_feedrate = 200000; //mmm, acceleration!
-float max_z_feedrate = 120;
+float x_steps_per_unit = 80;
+float y_steps_per_unit = 20;
+float z_steps_per_unit = 421.0526315789; //200/1.25;
+float e_steps_per_unit = 200/(6.6*3.14159)*(43/10);
+float max_feedrate = 20000; //mmm, acceleration!
+float max_z_feedrate = 100;
 
 //For SAE Prusa mendeel float z_steps_per_unit = should be 3200/1.411 for 5/16-18 rod and 3200/1.058 for 5/16-24
 //float x_steps_per_unit = 10.047;
@@ -114,8 +114,8 @@ const bool DISABLE_E = false;
 
 const bool INVERT_X_DIR = false;
 const bool INVERT_Y_DIR = false;
-const bool INVERT_Z_DIR = true;
-const bool INVERT_E_DIR = false;
+const bool INVERT_Z_DIR = false;
+const bool INVERT_E_DIR = true;
 
 // Sets direction of endstops when homing; 1=MAX, -1=MIN
 const int X_HOME_DIR = -1;
@@ -134,8 +134,8 @@ const int Z_HOME_DIR = -1;
 //#include "BedThermistorTable_200k.h"
 
 //Identical thermistors on heater and bed - use this if you have no heated bed or if the thermistors are the same on both:
-#include "ThermistorTable_200k.h"
-//#include "ThermistorTable_100k.h"
+//#include "ThermistorTable_200k.h"
+#include "ThermistorTable_100k.h"
 //#include "ThermistorTable_mendelparts.h"
 #define BNUMTEMPS NUMTEMPS
 #define bedtemptable temptable
@@ -145,9 +145,9 @@ const int Z_HOME_DIR = -1;
 const bool ENDSTOPS_INVERTING = false;
 const bool min_software_endstops = false; //If true, axis won't move to coordinates less than zero.
 const bool max_software_endstops = true;  //If true, axis won't move to coordinates greater than the defined lengths below.
-const int X_MAX_LENGTH = 220;
-const int Y_MAX_LENGTH = 220;
-const int Z_MAX_LENGTH = 100;
+const int X_MAX_LENGTH = 194;
+const int Y_MAX_LENGTH = 210;
+const int Z_MAX_LENGTH = 112;
 
 #define BAUDRATE 115200
 
