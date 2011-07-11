@@ -17,22 +17,22 @@
 //#define STEP_DELAY_RATIO 0.25
 
 //Comment this to disable ramp acceleration
-#define RAMP_ACCELERATION 1
+//#define RAMP_ACCELERATION 1
 
 //Uncomment this to enable exponential acceleration
-//#define EXP_ACCELERATION 1
+#define EXP_ACCELERATION 1
 
 //Acceleration settings
 #ifdef RAMP_ACCELERATION
 float min_units_per_second = 15.0; // the minimum feedrate
-long max_acceleration_units_per_sq_second = 200; // Max acceleration in mm/s^2 for printing moves
-long max_travel_acceleration_units_per_sq_second = 200; // Max acceleration in mm/s^2 for travel moves
+long max_acceleration_units_per_sq_second = 2000; // Max acceleration in mm/s^2 for printing moves
+long max_travel_acceleration_units_per_sq_second = 2000; // Max acceleration in mm/s^2 for travel moves
 #endif
 #ifdef EXP_ACCELERATION
-float full_velocity_units = 400; // the units between minimum and G1 move feedrate
-float travel_move_full_velocity_units = 400; // used for travel moves
-float min_units_per_second = 35.0; // the minimum feedrate
-float min_constant_speed_units = .1; // the minimum units of an accelerated move that must be done at constant speed
+float full_velocity_units = 5; // the units between minimum and G1 move feedrate
+float travel_move_full_velocity_units = 5; // used for travel moves
+float min_units_per_second = 35; // the minimum feedrate
+float min_constant_speed_units = .2; // the minimum units of an accelerated move that must be done at constant speed
                                     // Note that if the move is shorter than this value, acceleration won't be perfomed,
                                     // but will be done at the minimum between min_units_per_seconds and move feedrate speeds.
 #endif
