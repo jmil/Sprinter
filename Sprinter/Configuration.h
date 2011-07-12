@@ -21,7 +21,7 @@
 
 //// Calibration variables
 // X, Y, Z, E steps per unit - Metric Prusa Mendel with Wade extruder:
-float axis_steps_per_unit[] = {80, 80, 3200/1.25,700}; 
+float axis_steps_per_unit[] = {80, 20, 421.0526315789,(200/(6.5*3.14159)*(43/10))}; 
 // Metric Prusa Mendel with Makergear geared stepper extruder:
 //float axis_steps_per_unit[] = {80,80,3200/1.25,1380}; 
 
@@ -67,9 +67,9 @@ const int Z_HOME_DIR = -1;
 
 const bool min_software_endstops = false; //If true, axis won't move to coordinates less than zero.
 const bool max_software_endstops = true;  //If true, axis won't move to coordinates greater than the defined lengths below.
-const int X_MAX_LENGTH = 200;
-const int Y_MAX_LENGTH = 200;
-const int Z_MAX_LENGTH = 100;
+const int X_MAX_LENGTH = 194;
+const int Y_MAX_LENGTH = 210;
+const int Z_MAX_LENGTH = 112;
 
 //// MOVEMENT SETTINGS
 const int NUM_AXIS = 4; // The axis order in all axis related arrays is X, Y, Z, E
