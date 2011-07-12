@@ -435,10 +435,6 @@
 #error Oops!  Make sure you have 'Sanguino' selected from the 'Tools -> Boards' menu.
 #endif
 
-// uncomment the following line for Sanguinololu v1.2, comment for 1.1 or earlier.
-// #define SANGUINOLOLU_V_1_2 
-
-
 #define X_STEP_PIN         15
 #define X_DIR_PIN          21
 #define X_MIN_PIN          18
@@ -451,10 +447,6 @@
 
 #define Z_STEP_PIN         3
 #define Z_DIR_PIN          2
-<<<<<<< HEAD:Tonokip_Firmware/pins.h
-// zenable defined by platform below
-=======
->>>>>>> upstream/experimental:Sprinter/pins.h
 #define Z_MIN_PIN          20
 #define Z_MAX_PIN          -1
 
@@ -468,35 +460,23 @@
 #define PS_ON_PIN          -1
 #define KILL_PIN           -1
 
-<<<<<<< HEAD:Tonokip_Firmware/pins.h
-#define HEATER_0_PIN       13 // THIS LINE FOR V1.0+ (extruder)
-=======
 #define HEATER_0_PIN       13 // (extruder)
->>>>>>> upstream/experimental:Sprinter/pins.h
 
 #ifdef SANGUINOLOLU_V_1_2
 
 #define HEATER_1_PIN       12 // (bed)
-<<<<<<< HEAD:Tonokip_Firmware/pins.h
-#define Z_ENABLE_PIN       26
-=======
 #define X_ENABLE_PIN       14
 #define Y_ENABLE_PIN       14
 #define Z_ENABLE_PIN       26
 #define E_ENABLE_PIN       14
->>>>>>> upstream/experimental:Sprinter/pins.h
 
 #else
 
 #define HEATER_1_PIN       14  // (bed)
-<<<<<<< HEAD:Tonokip_Firmware/pins.h
-#define Z_ENABLE_PIN       -1
-=======
 #define X_ENABLE_PIN       -1
 #define Y_ENABLE_PIN       -1
 #define Z_ENABLE_PIN       -1
 #define E_ENABLE_PIN       -1
->>>>>>> upstream/experimental:Sprinter/pins.h
 
 #endif
 
