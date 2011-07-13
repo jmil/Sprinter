@@ -73,7 +73,7 @@ const int Z_MAX_LENGTH = 133;
 
 //// MOVEMENT SETTINGS
 const int NUM_AXIS = 4; // The axis order in all axis related arrays is X, Y, Z, E
-float max_feedrate[] = {200000, 2000, 240, 500000};
+float max_feedrate[] = {200000, 200000, 240, 500000};
 bool axis_relative_modes[] = {false, false, false, false};
 
 // Min step delay in microseconds. If you are experiencing missing steps, try to raise the delay microseconds, but be aware this
@@ -91,8 +91,8 @@ bool axis_relative_modes[] = {false, false, false, false};
 #ifdef RAMP_ACCELERATION
 // X, Y, Z, E maximum start speed for accelerated moves. E default values are good for skeinforge 40+, for older versions raise them a lot.
 float max_start_speed_units_per_second[] = {25.0,25.0,0.2,10.0};
-long max_acceleration_units_per_sq_second[] = {1000,150,50,10000}; // X, Y, Z and E max acceleration in mm/s^2 for printing moves or retracts
-long max_travel_acceleration_units_per_sq_second[] = {500,150,50,500}; // X, Y, Z max acceleration in mm/s^2 for travel moves
+long max_acceleration_units_per_sq_second[] = {1000,500,50,10000}; // X, Y, Z and E max acceleration in mm/s^2 for printing moves or retracts
+long max_travel_acceleration_units_per_sq_second[] = {500,250,50,500}; // X, Y, Z max acceleration in mm/s^2 for travel moves
 #endif
 
 //// AD595 THERMOCOUPLE SUPPORT UNTESTED... USE WITH CAUTION!!!!
