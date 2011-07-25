@@ -1,9 +1,10 @@
 // Tonokip RepRap firmware rewrite based off of Hydra-mmm firmware.
 // Licence: GPL
 
-#include "Sprinter.h"
+#include "fastio.h"
 #include "Configuration.h"
 #include "pins.h"
+#include "Sprinter.h"
 
 #ifdef SDSUPPORT
 #include "SdFat.h"
@@ -57,34 +58,27 @@
 
 
 //Stepper Movement Variables
+
 char axis_codes[NUM_AXIS] = {'X', 'Y', 'Z', 'E'};
 bool move_direction[NUM_AXIS];
-const int STEP_PIN[NUM_AXIS] = {X_STEP_PIN, Y_STEP_PIN, Z_STEP_PIN, E_STEP_PIN};
 unsigned long axis_previous_micros[NUM_AXIS];
 unsigned long previous_micros = 0, previous_millis_heater, previous_millis_bed_heater;
 unsigned long move_steps_to_take[NUM_AXIS];
 #ifdef RAMP_ACCELERATION
-  unsigned long axis_max_interval[] = {100000000.0 / (max_start_speed_units_per_second[0] * axis_steps_per_unit[0]),
-      100000000.0 / (max_start_speed_units_per_second[1] * axis_steps_per_unit[1]),
-      100000000.0 / (max_start_speed_units_per_second[2] * axis_steps_per_unit[2]),
-      100000000.0 / (max_start_speed_units_per_second[3] * axis_steps_per_unit[3])}; //TODO: refactor all things like this in a function, or move to setup()
-                                                                                     // in a for loop
-  unsigned long max_interval;
-  unsigned long axis_steps_per_sqr_second[] = {max_acceleration_units_per_sq_second[0] * axis_steps_per_unit[0],
-        max_acceleration_units_per_sq_second[1] * axis_steps_per_unit[1], max_acceleration_units_per_sq_second[2] * axis_steps_per_unit[2],
-        max_acceleration_units_per_sq_second[3] * axis_steps_per_unit[3]};
-  unsigned long axis_travel_steps_per_sqr_second[] = {max_travel_acceleration_units_per_sq_second[0] * axis_steps_per_unit[0],
-        max_travel_acceleration_units_per_sq_second[1] * axis_steps_per_unit[1], max_travel_acceleration_units_per_sq_second[2] * axis_steps_per_unit[2],
-        max_travel_acceleration_units_per_sq_second[3] * axis_steps_per_unit[3]};
-  unsigned long steps_per_sqr_second, plateau_steps;
+unsigned long axis_max_interval[NUM_AXIS];
+unsigned long axis_steps_per_sqr_second[NUM_AXIS];
+unsigned long axis_travel_steps_per_sqr_second[NUM_AXIS];
+unsigned long max_interval;
+unsigned long steps_per_sqr_second, plateau_steps;  
 #endif
 boolean acceleration_enabled = false, accelerating = false;
 unsigned long interval;
 float destination[NUM_AXIS] = {0.0, 0.0, 0.0, 0.0};
 float current_position[NUM_AXIS] = {0.0, 0.0, 0.0, 0.0};
+unsigned long steps_taken[NUM_AXIS];
 long axis_interval[NUM_AXIS]; // for speed delay
 bool home_all_axis = true;
-float feedrate = 1500, next_feedrate, saved_feedrate;
+int feedrate = 1500, next_feedrate, saved_feedrate;
 float time_for_move;
 long gcode_N, gcode_LastN;
 bool relative_mode = false;  //Determines Absolute or Relative Coordinates
@@ -120,7 +114,7 @@ int target_raw = 0;
 int current_raw = 0;
 int target_bed_raw = 0;
 int current_bed_raw = 0;
-float tt = 0, bt = 0;
+int tt = 0, bt = 0;
 #ifdef PIDTEMP
   int temp_iState = 0;
   int temp_dState = 0;
@@ -133,17 +127,17 @@ float tt = 0, bt = 0;
   int temp_iState_max = 100 * PID_INTEGRAL_DRIVE_MAX / PID_IGAIN;
 #endif
 #ifdef SMOOTHING
-  uint32_t nma = SMOOTHFACTOR * analogRead(TEMP_0_PIN);
+  uint32_t nma = 0;
 #endif
 #ifdef WATCHPERIOD
   int watch_raw = -1000;
   unsigned long watchmillis = 0;
 #endif
 #ifdef MINTEMP
-  int minttemp = temp2analog(MINTEMP);
+  int minttemp = temp2analogh(MINTEMP);
 #endif
 #ifdef MAXTEMP
-int maxttemp = temp2analog(MAXTEMP);
+int maxttemp = temp2analogh(MAXTEMP);
 #endif
         
 //Inactivity shutdown variables
@@ -211,59 +205,135 @@ void setup()
       fromsd[i] = false;
   }
 
-  //Initialize Step Pins
-  for(int i=0; i < NUM_AXIS; i++) if(STEP_PIN[i] > -1) pinMode(STEP_PIN[i],OUTPUT);
   
   //Initialize Dir Pins
-  if(X_DIR_PIN > -1) pinMode(X_DIR_PIN,OUTPUT);
-  if(Y_DIR_PIN > -1) pinMode(Y_DIR_PIN,OUTPUT);
-  if(Z_DIR_PIN > -1) pinMode(Z_DIR_PIN,OUTPUT);
-  if(E_DIR_PIN > -1) pinMode(E_DIR_PIN,OUTPUT);
-
-  //Steppers default to disabled.
-  if(X_ENABLE_PIN > -1) if(!X_ENABLE_ON) digitalWrite(X_ENABLE_PIN,HIGH);
-  if(Y_ENABLE_PIN > -1) if(!Y_ENABLE_ON) digitalWrite(Y_ENABLE_PIN,HIGH);
-  if(Z_ENABLE_PIN > -1) if(!Z_ENABLE_ON) digitalWrite(Z_ENABLE_PIN,HIGH);
-  if(E_ENABLE_PIN > -1) if(!E_ENABLE_ON) digitalWrite(E_ENABLE_PIN,HIGH);
-
-  //endstop pullups
-  #ifdef ENDSTOPPULLUPS
-    if(X_MIN_PIN > -1) { pinMode(X_MIN_PIN,INPUT); digitalWrite(X_MIN_PIN,HIGH);}
-    if(Y_MIN_PIN > -1) { pinMode(Y_MIN_PIN,INPUT); digitalWrite(Y_MIN_PIN,HIGH);}
-    if(Z_MIN_PIN > -1) { pinMode(Z_MIN_PIN,INPUT); digitalWrite(Z_MIN_PIN,HIGH);}
-    if(X_MAX_PIN > -1) { pinMode(X_MAX_PIN,INPUT); digitalWrite(X_MAX_PIN,HIGH);}
-    if(Y_MAX_PIN > -1) { pinMode(Y_MAX_PIN,INPUT); digitalWrite(Y_MAX_PIN,HIGH);}
-    if(Z_MAX_PIN > -1) { pinMode(Z_MAX_PIN,INPUT); digitalWrite(Z_MAX_PIN,HIGH);}
+  #if X_DIR_PIN > -1
+    SET_OUTPUT(X_DIR_PIN);
   #endif
-  //Initialize Enable Pins
-  if(X_ENABLE_PIN > -1) pinMode(X_ENABLE_PIN,OUTPUT);
-  if(Y_ENABLE_PIN > -1) pinMode(Y_ENABLE_PIN,OUTPUT);
-  if(Z_ENABLE_PIN > -1) pinMode(Z_ENABLE_PIN,OUTPUT);
-  if(E_ENABLE_PIN > -1) pinMode(E_ENABLE_PIN,OUTPUT);
-
-  if(HEATER_0_PIN > -1) pinMode(HEATER_0_PIN,OUTPUT);
-  if(HEATER_1_PIN > -1) pinMode(HEATER_1_PIN,OUTPUT);
+  #if Y_DIR_PIN > -1 
+    SET_OUTPUT(Y_DIR_PIN);
+  #endif
+  #if Z_DIR_PIN > -1 
+    SET_OUTPUT(Z_DIR_PIN);
+  #endif
+  #if E_DIR_PIN > -1 
+    SET_OUTPUT(E_DIR_PIN);
+  #endif
   
+  //Initialize Enable Pins - steppers default to disabled.
+  
+  #if (X_ENABLE_PIN > -1)
+    SET_OUTPUT(X_ENABLE_PIN);
+  if(!X_ENABLE_ON) WRITE(X_ENABLE_PIN,HIGH);
+  #endif
+  #if (Y_ENABLE_PIN > -1)
+    SET_OUTPUT(Y_ENABLE_PIN);
+  if(!Y_ENABLE_ON) WRITE(Y_ENABLE_PIN,HIGH);
+  #endif
+  #if (Z_ENABLE_PIN > -1)
+    SET_OUTPUT(Z_ENABLE_PIN);
+  if(!Z_ENABLE_ON) WRITE(Z_ENABLE_PIN,HIGH);
+  #endif
+  #if (E_ENABLE_PIN > -1)
+    SET_OUTPUT(E_ENABLE_PIN);
+  if(!E_ENABLE_ON) WRITE(E_ENABLE_PIN,HIGH);
+  #endif
+  
+  //endstops and pullups
+  #ifdef ENDSTOPPULLUPS
+  #if X_MIN_PIN > -1
+    SET_INPUT(X_MIN_PIN); 
+    WRITE(X_MIN_PIN,HIGH);
+  #endif
+  #if X_MAX_PIN > -1
+    SET_INPUT(X_MAX_PIN); 
+    WRITE(X_MAX_PIN,HIGH);
+  #endif
+  #if Y_MIN_PIN > -1
+    SET_INPUT(Y_MIN_PIN); 
+    WRITE(Y_MIN_PIN,HIGH);
+  #endif
+  #if Y_MAX_PIN > -1
+    SET_INPUT(Y_MAX_PIN); 
+    WRITE(Y_MAX_PIN,HIGH);
+  #endif
+  #if Z_MIN_PIN > -1
+    SET_INPUT(Z_MIN_PIN); 
+    WRITE(Z_MIN_PIN,HIGH);
+  #endif
+  #if Z_MAX_PIN > -1
+    SET_INPUT(Z_MAX_PIN); 
+    WRITE(Z_MAX_PIN,HIGH);
+  #endif
+  #else
+  #if X_MIN_PIN > -1
+    SET_INPUT(X_MIN_PIN); 
+  #endif
+  #if X_MAX_PIN > -1
+    SET_INPUT(X_MAX_PIN); 
+  #endif
+  #if Y_MIN_PIN > -1
+    SET_INPUT(Y_MIN_PIN); 
+  #endif
+  #if Y_MAX_PIN > -1
+    SET_INPUT(Y_MAX_PIN); 
+  #endif
+  #if Z_MIN_PIN > -1
+    SET_INPUT(Z_MIN_PIN); 
+  #endif
+  #if Z_MAX_PIN > -1
+    SET_INPUT(Z_MAX_PIN); 
+  #endif
+  #endif
+  
+  #if (HEATER_0_PIN > -1) 
+    SET_OUTPUT(HEATER_0_PIN);
+  #endif  
+  #if (HEATER_1_PIN > -1) 
+    SET_OUTPUT(HEATER_1_PIN);
+  #endif  
+  
+//Initialize Step Pins
+  #if (X_STEP_PIN > -1) 
+    SET_OUTPUT(X_STEP_PIN);
+  #endif  
+  #if (Y_STEP_PIN > -1) 
+    SET_OUTPUT(Y_STEP_PIN);
+  #endif  
+  #if (Z_STEP_PIN > -1) 
+    SET_OUTPUT(Z_STEP_PIN);
+  #endif  
+  #if (E_STEP_PIN > -1) 
+    SET_OUTPUT(E_STEP_PIN);
+  #endif  
+  #ifdef RAMP_ACCELERATION
+  for(int i=0; i < NUM_AXIS; i++){
+        axis_max_interval[i] = 100000000.0 / (max_start_speed_units_per_second[i] * axis_steps_per_unit[i]);
+        axis_steps_per_sqr_second[i] = max_acceleration_units_per_sq_second[i] * axis_steps_per_unit[i];
+        axis_travel_steps_per_sqr_second[i] = max_travel_acceleration_units_per_sq_second[i] * axis_steps_per_unit[i];
+    }
+  #endif
+    
 #ifdef HEATER_USES_MAX6675
-  digitalWrite(SCK_PIN,0);
-  pinMode(SCK_PIN,OUTPUT);
-
-  digitalWrite(MOSI_PIN,1);
-  pinMode(MOSI_PIN,OUTPUT);
-
-  digitalWrite(MISO_PIN,1);
-  pinMode(MISO_PIN,INPUT);
-
-  digitalWrite(MAX6675_SS,1);
-  pinMode(MAX6675_SS,OUTPUT);
+  SET_OUTPUT(SCK_PIN);
+  WRITE(SCK_PIN,0);
+  
+  SET_OUTPUT(MOSI_PIN);
+  WRITE(MOSI_PIN,1);
+  
+  SET_INPUT(MISO_PIN);
+  WRITE(MISO_PIN,1);
+  
+  SET_OUTPUT(MAX6675_SS);
+  WRITE(MAX6675_SS,1);
 #endif  
  
 #ifdef SDSUPPORT
 
   //power to SD reader
   #if SDPOWER > -1
-    pinMode(SDPOWER,OUTPUT); 
-    digitalWrite(SDPOWER,HIGH);
+    SET_OUTPUT(SDPOWER); 
+    WRITE(SDPOWER,HIGH);
   #endif
   initsd();
 
@@ -471,8 +541,7 @@ inline void process_commands()
       case 28: //G28 Home all Axis one at a time
         saved_feedrate = feedrate;
         for(int i=0; i < NUM_AXIS; i++) {
-          destination[i] = 0;
-          current_position[i] = 0;
+          destination[i] = current_position[i];
         }
         feedrate = 0;
 
@@ -482,7 +551,7 @@ inline void process_commands()
           if ((X_MIN_PIN > -1 && X_HOME_DIR==-1) || (X_MAX_PIN > -1 && X_HOME_DIR==1)){
             current_position[0] = 0;
             destination[0] = 1.5 * X_MAX_LENGTH * X_HOME_DIR;
-            feedrate = max_start_speed_units_per_second[0] * 60;
+            feedrate = homing_feedrate[0];
             prepare_move();
           
             current_position[0] = 0;
@@ -492,8 +561,8 @@ inline void process_commands()
             destination[0] = 10 * X_HOME_DIR;
             prepare_move();
           
-            current_position[0] = 0;
-            destination[0] = 0;
+            current_position[0] = (X_HOME_DIR == -1) ? 0 : X_MAX_LENGTH;
+            destination[0] = current_position[0];
             feedrate = 0;
           }
         }
@@ -502,7 +571,7 @@ inline void process_commands()
           if ((Y_MIN_PIN > -1 && Y_HOME_DIR==-1) || (Y_MAX_PIN > -1 && Y_HOME_DIR==1)){
             current_position[1] = 0;
             destination[1] = 1.5 * Y_MAX_LENGTH * Y_HOME_DIR;
-            feedrate = max_start_speed_units_per_second[1] * 60;
+            feedrate = homing_feedrate[1];
             prepare_move();
           
             current_position[1] = 0;
@@ -512,8 +581,8 @@ inline void process_commands()
             destination[1] = 10 * Y_HOME_DIR;
             prepare_move();
           
-            current_position[1] = 0;
-            destination[1] = 0;
+            current_position[1] = (Y_HOME_DIR == -1) ? 0 : Y_MAX_LENGTH;
+            destination[1] = current_position[1];
             feedrate = 0;
           }
         }
@@ -522,7 +591,7 @@ inline void process_commands()
           if ((Z_MIN_PIN > -1 && Z_HOME_DIR==-1) || (Z_MAX_PIN > -1 && Z_HOME_DIR==1)){
             current_position[2] = 0;
             destination[2] = 1.5 * Z_MAX_LENGTH * Z_HOME_DIR;
-            feedrate = max_feedrate[2]/2;
+            feedrate = homing_feedrate[2];
             prepare_move();
           
             current_position[2] = 0;
@@ -532,8 +601,8 @@ inline void process_commands()
             destination[2] = 10 * Z_HOME_DIR;
             prepare_move();
           
-            current_position[2] = 0;
-            destination[2] = 0;
+            current_position[2] = (Z_HOME_DIR == -1) ? 0 : Z_MAX_LENGTH;
+            destination[2] = current_position[2];
             feedrate = 0;
           
         }
@@ -653,7 +722,7 @@ inline void process_commands()
         break;
 #endif
       case 104: // M104
-        if (code_seen('S')) target_raw = temp2analog(code_value());
+        if (code_seen('S')) target_raw = temp2analogh(code_value());
         #ifdef WATCHPERIOD
             if(target_raw > current_raw){
                 watchmillis = max(1,millis());
@@ -664,7 +733,9 @@ inline void process_commands()
         #endif
         break;
       case 140: // M140 set bed temp
-        if (code_seen('S')) target_bed_raw = temp2analogBed(code_value());
+        #if TEMP_1_PIN > -1 || defined BED_USES_AD595
+            if (code_seen('S')) target_bed_raw = temp2analogBed(code_value());
+        #endif
         break;
       case 105: // M105
         #if (TEMP_0_PIN > -1) || defined (HEATER_USES_MAX6675)|| defined HEATER_USES_AD595
@@ -683,12 +754,12 @@ inline void process_commands()
             Serial.println();
           #endif
         #else
-          Serial.println("No thermistors - no temp");
+          #error No temperature source available
         #endif
         return;
         //break;
       case 109: // M109 - Wait for extruder heater to reach target.
-        if (code_seen('S')) target_raw = temp2analog(code_value());
+        if (code_seen('S')) target_raw = temp2analogh(code_value());
         #ifdef WATCHPERIOD
             if(target_raw>current_raw){
                 watchmillis = max(1,millis());
@@ -707,10 +778,27 @@ inline void process_commands()
           }
           manage_heater();
         }
+        // wait extra time before letting the print continue
+        #ifdef TEMP_RESIDENCY_TIME
+        {
+          long residencyStart = millis();
+          codenum = millis();
+          while(millis()-residencyStart<(TEMP_RESIDENCY_TIME*1000)) {
+            if( (millis() - codenum) > 1000 ) //Print Temp Reading every 1 second while heating up.
+            {
+              Serial.print("T:");
+              Serial.println( analog2temp(current_raw) ); 
+              codenum = millis(); 
+            }
+            manage_heater();
+          }
+        }
+        #endif
+        
         break;
       case 190: // M190 - Wait bed for heater to reach target.
       #if TEMP_1_PIN > -1
-        if (code_seen('S')) target_bed_raw = temp2analog(code_value());
+        if (code_seen('S')) target_bed_raw = temp2analogh(code_value());
         codenum = millis(); 
         while(current_bed_raw < target_bed_raw) {
           if( (millis()-codenum) > 1000 ) //Print Temp Reading every 1 second while heating up.
@@ -726,25 +814,29 @@ inline void process_commands()
         }
       #endif
       break;
+      #if FAN_PIN > -1
       case 106: //M106 Fan On
         if (code_seen('S')){
-            digitalWrite(FAN_PIN, HIGH);
+            WRITE(FAN_PIN, HIGH);
             analogWrite(FAN_PIN, constrain(code_value(),0,255) );
         }
         else
-            digitalWrite(FAN_PIN, HIGH);
+            WRITE(FAN_PIN, HIGH);
         break;
       case 107: //M107 Fan Off
         analogWrite(FAN_PIN, 0);
         
-        digitalWrite(FAN_PIN, LOW);
+        WRITE(FAN_PIN, LOW);
         break;
+      #endif
+      #if (PS_ON_PIN > -1)
       case 80: // M81 - ATX Power On
-        if(PS_ON_PIN > -1) pinMode(PS_ON_PIN,OUTPUT); //GND
+        SET_OUTPUT(PS_ON_PIN); //GND
         break;
       case 81: // M81 - ATX Power Off
-        if(PS_ON_PIN > -1) pinMode(PS_ON_PIN,INPUT); //Floating
+        SET_INPUT(PS_ON_PIN); //Floating
         break;
+      #endif
       case 82:
         axis_relative_modes[3] = false;
         break;
@@ -775,7 +867,8 @@ inline void process_commands()
         #endif
         break;
       case 115: // M115
-        Serial.println("FIRMWARE_NAME:Sprinter FIRMWARE_URL:http%%3A/github.com/kliment/Sprinter/ PROTOCOL_VERSION:1.0 MACHINE_TYPE:Mendel EXTRUDER_COUNT:1");
+        Serial.print("FIRMWARE_NAME:Sprinter FIRMWARE_URL:http%%3A/github.com/kliment/Sprinter/ PROTOCOL_VERSION:1.0 MACHINE_TYPE:Mendel EXTRUDER_COUNT:1 UUID:");
+        Serial.println(uuid);
         break;
       case 114: // M114
 	Serial.print("X:");
@@ -790,27 +883,27 @@ inline void process_commands()
       case 119: // M119
       	#if (X_MIN_PIN > -1)
       	Serial.print("x_min:");
-        Serial.print((digitalRead(X_MIN_PIN)^ENDSTOPS_INVERTING)?"H ":"L ");
+        Serial.print((READ(X_MIN_PIN)^ENDSTOPS_INVERTING)?"H ":"L ");
       	#endif
       	#if (X_MAX_PIN > -1)
       	Serial.print("x_max:");
-        Serial.print((digitalRead(X_MAX_PIN)^ENDSTOPS_INVERTING)?"H ":"L ");
+        Serial.print((READ(X_MAX_PIN)^ENDSTOPS_INVERTING)?"H ":"L ");
       	#endif
       	#if (Y_MIN_PIN > -1)
       	Serial.print("y_min:");
-        Serial.print((digitalRead(Y_MIN_PIN)^ENDSTOPS_INVERTING)?"H ":"L ");
+        Serial.print((READ(Y_MIN_PIN)^ENDSTOPS_INVERTING)?"H ":"L ");
       	#endif
       	#if (Y_MAX_PIN > -1)
       	Serial.print("y_max:");
-        Serial.print((digitalRead(Y_MAX_PIN)^ENDSTOPS_INVERTING)?"H ":"L ");
+        Serial.print((READ(Y_MAX_PIN)^ENDSTOPS_INVERTING)?"H ":"L ");
       	#endif
       	#if (Z_MIN_PIN > -1)
       	Serial.print("z_min:");
-        Serial.print((digitalRead(Z_MIN_PIN)^ENDSTOPS_INVERTING)?"H ":"L ");
+        Serial.print((READ(Z_MIN_PIN)^ENDSTOPS_INVERTING)?"H ":"L ");
       	#endif
       	#if (Z_MAX_PIN > -1)
       	Serial.print("z_max:");
-        Serial.print((digitalRead(Z_MAX_PIN)^ENDSTOPS_INVERTING)?"H ":"L ");
+        Serial.print((READ(Z_MAX_PIN)^ENDSTOPS_INVERTING)?"H ":"L ");
       	#endif
         Serial.println("");
       	break;
@@ -839,7 +932,7 @@ inline void process_commands()
       
 }
 
-inline void FlushSerialRequestResend()
+void FlushSerialRequestResend()
 {
   //char cmdbuffer[bufindr][100]="Resend:";
   Serial.flush();
@@ -848,7 +941,7 @@ inline void FlushSerialRequestResend()
   ClearToSend();
 }
 
-inline void ClearToSend()
+void ClearToSend()
 {
   previous_millis_cmd = millis();
   #ifdef SDSUPPORT
@@ -870,7 +963,7 @@ inline void get_coordinates()
   }
 }
 
-inline void prepare_move()
+void prepare_move()
 {
   //Find direction
   for(int i=0; i < NUM_AXIS; i++) {
@@ -900,17 +993,29 @@ inline void prepare_move()
   
   //Feedrate calc based on XYZ travel distance
   float xy_d;
-  if(abs(axis_diff[0]) > 0 || abs(axis_diff[1]) > 0 || abs(axis_diff[2])) {
+  //Check for cases where only one axis is moving - handle those without float sqrt
+  if(abs(axis_diff[0]) > 0 && abs(axis_diff[1]) == 0 && abs(axis_diff[2])==0)
+    d=abs(axis_diff[0]);
+  else if(abs(axis_diff[0]) == 0 && abs(axis_diff[1]) > 0 && abs(axis_diff[2])==0)
+    d=abs(axis_diff[1]);
+  else if(abs(axis_diff[0]) == 0 && abs(axis_diff[1]) == 0 && abs(axis_diff[2])>0)
+    d=abs(axis_diff[2]);
+  //two or three XYZ axes moving
+  else if(abs(axis_diff[0]) > 0 || abs(axis_diff[1]) > 0) { //X or Y or both
     xy_d = sqrt(axis_diff[0] * axis_diff[0] + axis_diff[1] * axis_diff[1]);
-    d = sqrt(xy_d * xy_d + axis_diff[2] * axis_diff[2]);
+    //check if Z involved - if so interpolate that too
+    d = (abs(axis_diff[2]>0))?sqrt(xy_d * xy_d + axis_diff[2] * axis_diff[2]):xy_d;
   }
   else if(abs(axis_diff[3]) > 0)
     d = abs(axis_diff[3]);
+  else{ //zero length move
   #ifdef DEBUG_PREPARE_MOVE
-    else {
+    
       log_message("_PREPARE_MOVE - No steps to take!");
-    }
+    
   #endif
+    return;
+    }
   time_for_move = (d / (feedrate / 60000000.0) );
   //Check max feedrate for each axis is not violated, update time_for_move if necessary
   for(int i = 0; i < NUM_AXIS; i++) {
@@ -926,7 +1031,7 @@ inline void prepare_move()
   #ifdef DEBUG_PREPARE_MOVE
     log_float("_PREPARE_MOVE - Move distance on the XY plane", xy_d);
     log_float("_PREPARE_MOVE - Move distance on the XYZ space", d);
-    log_float("_PREPARE_MOVE - Commanded feedrate", feedrate);
+    log_int("_PREPARE_MOVE - Commanded feedrate", feedrate);
     log_float("_PREPARE_MOVE - Constant full speed move time", time_for_move);
     log_float_array("_PREPARE_MOVE - Destination", destination, NUM_AXIS);
     log_float_array("_PREPARE_MOVE - Current position", current_position, NUM_AXIS);
@@ -940,24 +1045,36 @@ inline void prepare_move()
   linear_move(move_steps); // make the move
 }
 
-void linear_move(unsigned long axis_steps_remaining[]) // make linear move with preset speeds and destinations, see G0 and G1
+inline void linear_move(unsigned long axis_steps_remaining[]) // make linear move with preset speeds and destinations, see G0 and G1
 {
   //Determine direction of movement
-  if (destination[0] > current_position[0]) digitalWrite(X_DIR_PIN,!INVERT_X_DIR);
-  else digitalWrite(X_DIR_PIN,INVERT_X_DIR);
-  if (destination[1] > current_position[1]) digitalWrite(Y_DIR_PIN,!INVERT_Y_DIR);
-  else digitalWrite(Y_DIR_PIN,INVERT_Y_DIR);
-  if (destination[2] > current_position[2]) digitalWrite(Z_DIR_PIN,!INVERT_Z_DIR);
-  else digitalWrite(Z_DIR_PIN,INVERT_Z_DIR);
-  if (destination[3] > current_position[3]) digitalWrite(E_DIR_PIN,!INVERT_E_DIR);
-  else digitalWrite(E_DIR_PIN,INVERT_E_DIR);
-  
-  if(X_MIN_PIN > -1) if(!move_direction[0]) if(digitalRead(X_MIN_PIN) != ENDSTOPS_INVERTING) axis_steps_remaining[0]=0;
-  if(Y_MIN_PIN > -1) if(!move_direction[1]) if(digitalRead(Y_MIN_PIN) != ENDSTOPS_INVERTING) axis_steps_remaining[1]=0;
-  if(Z_MIN_PIN > -1) if(!move_direction[2]) if(digitalRead(Z_MIN_PIN) != ENDSTOPS_INVERTING) axis_steps_remaining[2]=0;
-  if(X_MAX_PIN > -1) if(move_direction[0]) if(digitalRead(X_MAX_PIN) != ENDSTOPS_INVERTING) axis_steps_remaining[0]=0;
-  if(Y_MAX_PIN > -1) if(move_direction[1]) if(digitalRead(Y_MAX_PIN) != ENDSTOPS_INVERTING) axis_steps_remaining[1]=0;
-  if(Z_MAX_PIN > -1) if(move_direction[2]) if(digitalRead(Z_MAX_PIN) != ENDSTOPS_INVERTING) axis_steps_remaining[2]=0;
+  if (destination[0] > current_position[0]) WRITE(X_DIR_PIN,!INVERT_X_DIR);
+  else WRITE(X_DIR_PIN,INVERT_X_DIR);
+  if (destination[1] > current_position[1]) WRITE(Y_DIR_PIN,!INVERT_Y_DIR);
+  else WRITE(Y_DIR_PIN,INVERT_Y_DIR);
+  if (destination[2] > current_position[2]) WRITE(Z_DIR_PIN,!INVERT_Z_DIR);
+  else WRITE(Z_DIR_PIN,INVERT_Z_DIR);
+  if (destination[3] > current_position[3]) WRITE(E_DIR_PIN,!INVERT_E_DIR);
+  else WRITE(E_DIR_PIN,INVERT_E_DIR);
+  movereset:
+  #if (X_MIN_PIN > -1) 
+    if(!move_direction[0]) if(READ(X_MIN_PIN) != ENDSTOPS_INVERTING) axis_steps_remaining[0]=0;
+  #endif
+  #if (Y_MIN_PIN > -1) 
+    if(!move_direction[1]) if(READ(Y_MIN_PIN) != ENDSTOPS_INVERTING) axis_steps_remaining[1]=0;
+  #endif
+  #if (Z_MIN_PIN > -1) 
+    if(!move_direction[2]) if(READ(Z_MIN_PIN) != ENDSTOPS_INVERTING) axis_steps_remaining[2]=0;
+  #endif
+  #if (X_MAX_PIN > -1) 
+    if(move_direction[0]) if(READ(X_MAX_PIN) != ENDSTOPS_INVERTING) axis_steps_remaining[0]=0;
+  #endif
+  #if (Y_MAX_PIN > -1) 
+    if(move_direction[1]) if(READ(Y_MAX_PIN) != ENDSTOPS_INVERTING) axis_steps_remaining[1]=0;
+  #endif
+  # if(Z_MAX_PIN > -1) 
+    if(move_direction[2]) if(READ(Z_MAX_PIN) != ENDSTOPS_INVERTING) axis_steps_remaining[2]=0;
+  #endif
   
   
   //Only enable axis that are moving. If the axis doesn't need to move then it can stay disabled depending on configuration.
@@ -971,14 +1088,17 @@ void linear_move(unsigned long axis_steps_remaining[]) // make linear move with 
     //Define variables that are needed for the Bresenham algorithm. Please note that  Z is not currently included in the Bresenham algorithm.
   unsigned long delta[] = {axis_steps_remaining[0], axis_steps_remaining[1], axis_steps_remaining[2], axis_steps_remaining[3]}; //TODO: implement a "for" to support N axes
   long axis_error[NUM_AXIS];
-  unsigned int primary_axis;
+  int primary_axis;
   if(delta[1] > delta[0] && delta[1] > delta[2] && delta[1] > delta[3]) primary_axis = 1;
   else if (delta[0] >= delta[1] && delta[0] > delta[2] && delta[0] > delta[3]) primary_axis = 0;
   else if (delta[2] >= delta[0] && delta[2] >= delta[1] && delta[2] > delta[3]) primary_axis = 2;
   else primary_axis = 3;
   unsigned long steps_remaining = delta[primary_axis];
   unsigned long steps_to_take = steps_remaining;
-  for(int i=0; i < NUM_AXIS; i++) if(i != primary_axis) axis_error[i] = delta[primary_axis] / 2;
+  for(int i=0; i < NUM_AXIS; i++){
+       if(i != primary_axis) axis_error[i] = delta[primary_axis] / 2;
+       steps_taken[i]=0;
+    }
   interval = axis_interval[primary_axis];
   bool is_print_move = delta[3] > 0;
   #ifdef DEBUG_BRESENHAM
@@ -1003,8 +1123,9 @@ void linear_move(unsigned long axis_steps_remaining[]) // make linear move with 
     int slowest_start_axis = primary_axis;
     unsigned long slowest_start_axis_max_interval = max_interval;
     for(int i = 0; i < NUM_AXIS; i++)
-      if (axis_steps_remaining[i] >0 && i != primary_axis && axis_max_interval[i] * axis_steps_remaining[i]
-              / axis_steps_remaining[slowest_start_axis] > slowest_start_axis_max_interval) {
+      if (axis_steps_remaining[i] >0 && 
+            i != primary_axis && 
+            axis_max_interval[i] * axis_steps_remaining[i]/ axis_steps_remaining[slowest_start_axis] > slowest_start_axis_max_interval) {
         slowest_start_axis = i;
         slowest_start_axis_max_interval = axis_max_interval[i];
       }
@@ -1012,7 +1133,7 @@ void linear_move(unsigned long axis_steps_remaining[]) // make linear move with 
       if(axis_steps_remaining[i] >0) {
         // multiplying slowest_start_axis_max_interval by axis_steps_remaining[slowest_start_axis]
         // could lead to overflows when we have long distance moves (say, 390625*390625 > sizeof(unsigned long))
-        float steps_remaining_ratio = axis_steps_remaining[slowest_start_axis] / axis_steps_remaining[i];
+        float steps_remaining_ratio = (float) axis_steps_remaining[slowest_start_axis] / axis_steps_remaining[i];
         new_axis_max_intervals[i] = slowest_start_axis_max_interval * steps_remaining_ratio;
         
         if(i == primary_axis) {
@@ -1044,7 +1165,7 @@ void linear_move(unsigned long axis_steps_remaining[]) // make linear move with 
   #ifdef RAMP_ACCELERATION
   plateau_steps *= 1.01; // This is to compensate we use discrete intervals
   acceleration_enabled = true;
-  long full_interval = interval;
+  unsigned long full_interval = interval;
   if(interval > max_interval) acceleration_enabled = false;
   boolean decelerating = false;
   #endif
@@ -1127,18 +1248,35 @@ void linear_move(unsigned long axis_steps_remaining[]) // make linear move with 
 
     //If there are x or y steps remaining, perform Bresenham algorithm
     if(axis_steps_remaining[primary_axis]) {
-      if(X_MIN_PIN > -1) if(!move_direction[0]) if(digitalRead(X_MIN_PIN) != ENDSTOPS_INVERTING) break;
-      if(Y_MIN_PIN > -1) if(!move_direction[1]) if(digitalRead(Y_MIN_PIN) != ENDSTOPS_INVERTING) break;
-      if(X_MAX_PIN > -1) if(move_direction[0]) if(digitalRead(X_MAX_PIN) != ENDSTOPS_INVERTING) break;
-      if(Y_MAX_PIN > -1) if(move_direction[1]) if(digitalRead(Y_MAX_PIN) != ENDSTOPS_INVERTING) break;
-      if(Z_MIN_PIN > -1) if(!move_direction[2]) if(digitalRead(Z_MIN_PIN) != ENDSTOPS_INVERTING) break;
-      if(Z_MAX_PIN > -1) if(move_direction[2]) if(digitalRead(Z_MAX_PIN) != ENDSTOPS_INVERTING) break;
+      #if (X_MIN_PIN > -1) 
+        if(!move_direction[0]) if(READ(X_MIN_PIN) != ENDSTOPS_INVERTING) if(primary_axis==0) break; else if(axis_steps_remaining[0]) axis_steps_remaining[0]=0;
+      #endif
+      #if (Y_MIN_PIN > -1) 
+        if(!move_direction[1]) if(READ(Y_MIN_PIN) != ENDSTOPS_INVERTING) if(primary_axis==1) break; else if(axis_steps_remaining[1]) axis_steps_remaining[1]=0;
+      #endif
+      #if (X_MAX_PIN > -1) 
+        if(move_direction[0]) if(READ(X_MAX_PIN) != ENDSTOPS_INVERTING) if(primary_axis==0) break; else if(axis_steps_remaining[0]) axis_steps_remaining[0]=0;
+      #endif
+      #if (Y_MAX_PIN > -1) 
+        if(move_direction[1]) if(READ(Y_MAX_PIN) != ENDSTOPS_INVERTING) if(primary_axis==1) break; else if(axis_steps_remaining[1]) axis_steps_remaining[1]=0;
+      #endif
+      #if (Z_MIN_PIN > -1) 
+        if(!move_direction[2]) if(READ(Z_MIN_PIN) != ENDSTOPS_INVERTING) if(primary_axis==2) break; else if(axis_steps_remaining[2]) axis_steps_remaining[2]=0;
+      #endif
+      #if (Z_MAX_PIN > -1) 
+        if(move_direction[2]) if(READ(Z_MAX_PIN) != ENDSTOPS_INVERTING) if(primary_axis==2) break; else if(axis_steps_remaining[2]) axis_steps_remaining[2]=0;
+      #endif
       timediff = micros() * 100 - axis_previous_micros[primary_axis];
-      while(timediff >= interval && axis_steps_remaining[primary_axis] > 0) {
+      if(timediff<0){//check for overflow
+        axis_previous_micros[primary_axis]=micros()*100;
+        timediff=interval/2; //approximation
+      }
+      while(((unsigned long)timediff) >= interval && axis_steps_remaining[primary_axis] > 0) {
         steps_done++;
         steps_remaining--;
         axis_steps_remaining[primary_axis]--; timediff -= interval;
-        do_step_update_micros(primary_axis);
+        do_step(primary_axis);
+        axis_previous_micros[primary_axis] += interval;
         for(int i=0; i < NUM_AXIS; i++) if(i != primary_axis && axis_steps_remaining[i] > 0) {
           axis_error[i] = axis_error[i] - delta[i];
           if(axis_error[i] < 0) {
@@ -1166,37 +1304,39 @@ void linear_move(unsigned long axis_steps_remaining[]) // make linear move with 
   
   // Update current position partly based on direction, we probably can combine this with the direction code above...
   for(int i=0; i < NUM_AXIS; i++) {
-    if (destination[i] > current_position[i]) current_position[i] = current_position[i] + move_steps_to_take[i] /  axis_steps_per_unit[i];
-    else current_position[i] = current_position[i] - move_steps_to_take[i] / axis_steps_per_unit[i];
+    if (destination[i] > current_position[i]) current_position[i] = current_position[i] + steps_taken[i] /  axis_steps_per_unit[i];
+    else current_position[i] = current_position[i] - steps_taken[i] / axis_steps_per_unit[i];
   }
 }
 
-inline void do_step_update_micros(int axis) {
-  digitalWrite(STEP_PIN[axis], HIGH);
-  axis_previous_micros[axis] += interval;
-  digitalWrite(STEP_PIN[axis], LOW);
+void do_step(int axis) {
+  switch(axis){
+  case 0:
+    WRITE(X_STEP_PIN, HIGH);
+    break;
+  case 1:
+    WRITE(Y_STEP_PIN, HIGH);
+    break;
+  case 2:
+    WRITE(Z_STEP_PIN, HIGH);
+    break;
+  case 3:
+    WRITE(E_STEP_PIN, HIGH);
+    break;
+  }
+  steps_taken[axis]+=1;
+  WRITE(X_STEP_PIN, LOW);
+  WRITE(Y_STEP_PIN, LOW);
+  WRITE(Z_STEP_PIN, LOW);
+  WRITE(E_STEP_PIN, LOW);
 }
-
-inline void do_step(int axis) {
-  digitalWrite(STEP_PIN[axis], HIGH);
-  digitalWrite(STEP_PIN[axis], LOW);
-}
-
-inline void disable_x() { if(X_ENABLE_PIN > -1) digitalWrite(X_ENABLE_PIN,!X_ENABLE_ON); }
-inline void disable_y() { if(Y_ENABLE_PIN > -1) digitalWrite(Y_ENABLE_PIN,!Y_ENABLE_ON); }
-inline void disable_z() { if(Z_ENABLE_PIN > -1) digitalWrite(Z_ENABLE_PIN,!Z_ENABLE_ON); }
-inline void disable_e() { if(E_ENABLE_PIN > -1) digitalWrite(E_ENABLE_PIN,!E_ENABLE_ON); }
-inline void  enable_x() { if(X_ENABLE_PIN > -1) digitalWrite(X_ENABLE_PIN, X_ENABLE_ON); }
-inline void  enable_y() { if(Y_ENABLE_PIN > -1) digitalWrite(Y_ENABLE_PIN, Y_ENABLE_ON); }
-inline void  enable_z() { if(Z_ENABLE_PIN > -1) digitalWrite(Z_ENABLE_PIN, Z_ENABLE_ON); }
-inline void  enable_e() { if(E_ENABLE_PIN > -1) digitalWrite(E_ENABLE_PIN, E_ENABLE_ON); }
 
 #define HEAT_INTERVAL 250
 #ifdef HEATER_USES_MAX6675
 unsigned long max6675_previous_millis = 0;
 int max6675_temp = 2000;
 
-inline int read_max6675()
+int read_max6675()
 {
   if (millis() - max6675_previous_millis < HEAT_INTERVAL) 
     return max6675_temp;
@@ -1214,7 +1354,7 @@ inline int read_max6675()
   SPCR = (1<<MSTR) | (1<<SPE) | (1<<SPR0);
   
   // enable TT_MAX6675
-  digitalWrite(MAX6675_SS, 0);
+  WRITE(MAX6675_SS, 0);
   
   // ensure 100ns delay - a bit extra is fine
   delay(1);
@@ -1231,7 +1371,7 @@ inline int read_max6675()
   max6675_temp |= SPDR;
   
   // disable TT_MAX6675
-  digitalWrite(MAX6675_SS, 1);
+  WRITE(MAX6675_SS, 1);
 
   if (max6675_temp & 4) 
   {
@@ -1248,7 +1388,7 @@ inline int read_max6675()
 #endif
 
 
-inline void manage_heater()
+void manage_heater()
 {
   if((millis() - previous_millis_heater) < HEATER_CHECK_INTERVAL )
     return;
@@ -1268,6 +1408,7 @@ inline void manage_heater()
     current_raw = read_max6675();
   #endif
   #ifdef SMOOTHING
+  if (!nma) nma = SMOOTHFACTOR * current_raw;
   nma = (nma + current_raw) - (nma / SMOOTHFACTOR);
   current_raw = nma / SMOOTHFACTOR;
   #endif
@@ -1275,8 +1416,10 @@ inline void manage_heater()
     if(watchmillis && millis() - watchmillis > WATCHPERIOD){
         if(watch_raw + 1 >= current_raw){
             target_raw = 0;
-            digitalWrite(HEATER_0_PIN,LOW);
-            digitalWrite(LED_PIN,LOW);
+            WRITE(HEATER_0_PIN,LOW);
+            #if LED_PIN>-1
+                WRITE(LED_PIN,LOW);
+            #endif
         }else{
             watchmillis = 0;
         }
@@ -1304,13 +1447,17 @@ inline void manage_heater()
     #else
       if(current_raw >= target_raw)
       {
-        digitalWrite(HEATER_0_PIN,LOW);
-        digitalWrite(LED_PIN,LOW);
+        WRITE(HEATER_0_PIN,LOW);
+        #if LED_PIN>-1
+            WRITE(LED_PIN,LOW);
+        #endif
       }
       else 
       {
-        digitalWrite(HEATER_0_PIN,HIGH);
-        digitalWrite(LED_PIN,HIGH);
+        WRITE(HEATER_0_PIN,HIGH);
+        #if LED_PIN > -1
+            WRITE(LED_PIN,HIGH);
+        #endif
       }
     #endif
   #endif
@@ -1318,6 +1465,12 @@ inline void manage_heater()
   if(millis() - previous_millis_bed_heater < BED_CHECK_INTERVAL)
     return;
   previous_millis_bed_heater = millis();
+  #ifndef TEMP_1_PIN
+    return;
+  #endif
+  #if TEMP_1_PIN == -1
+    return;
+  #else
   
   #ifdef BED_USES_THERMISTOR
   
@@ -1336,157 +1489,98 @@ inline void manage_heater()
   #endif
   
   
-  #if TEMP_1_PIN > -1
     if(current_bed_raw >= target_bed_raw)
     {
-      digitalWrite(HEATER_1_PIN,LOW);
+      WRITE(HEATER_1_PIN,LOW);
     }
     else 
     {
-      digitalWrite(HEATER_1_PIN,HIGH);
+      WRITE(HEATER_1_PIN,HIGH);
     }
-  #endif
+    #endif
 }
 
-// Takes hot end temperature value as input and returns corresponding raw value. 
-// For a thermistor, it uses the RepRap thermistor temp table.
-// This is needed because PID in hydra firmware hovers around a given analog value, not a temp value.
-// This function is derived from inversing the logic from a portion of getTemperature() in FiveD RepRap firmware.
-float temp2analog(int celsius) {
-  #ifdef HEATER_USES_THERMISTOR
+
+int temp2analogu(int celsius, const short table[][2], int numtemps, int source) {
+  #if defined (HEATER_USES_THERMISTOR) || defined (BED_USES_THERMISTOR)
+  if(source==1){
     int raw = 0;
     byte i;
     
-    for (i=1; i<NUMTEMPS; i++)
+    for (i=1; i<numtemps; i++)
     {
-      if (temptable[i][1] < celsius)
+      if (table[i][1] < celsius)
       {
-        raw = temptable[i-1][0] + 
-          (celsius - temptable[i-1][1]) * 
-          (temptable[i][0] - temptable[i-1][0]) /
-          (temptable[i][1] - temptable[i-1][1]);
+        raw = table[i-1][0] + 
+          (celsius - table[i-1][1]) * 
+          (table[i][0] - table[i-1][0]) /
+          (table[i][1] - table[i-1][1]);
       
         break;
       }
     }
 
     // Overflow: Set to last value in the table
-    if (i == NUMTEMPS) raw = temptable[i-1][0];
+    if (i == numtemps) raw = table[i-1][0];
 
     return 1023 - raw;
-  #elif defined HEATER_USES_AD595
-    return celsius * (1024.0 / (5.0 * 100.0) );
-  #elif defined HEATER_USES_MAX6675
-    return celsius * 4.0;
-  #endif
-}
-
-// Takes bed temperature value as input and returns corresponding raw value. 
-// For a thermistor, it uses the RepRap thermistor temp table.
-// This is needed because PID in hydra firmware hovers around a given analog value, not a temp value.
-// This function is derived from inversing the logic from a portion of getTemperature() in FiveD RepRap firmware.
-float temp2analogBed(int celsius) {
-  #ifdef BED_USES_THERMISTOR
-
-    int raw = 0;
-    byte i;
-    
-    for (i=1; i<BNUMTEMPS; i++)
-    {
-      if (bedtemptable[i][1] < celsius)
-      {
-        raw = bedtemptable[i-1][0] + 
-          (celsius - bedtemptable[i-1][1]) * 
-          (bedtemptable[i][0] - bedtemptable[i-1][0]) /
-          (bedtemptable[i][1] - bedtemptable[i-1][1]);
-      
-        break;
-      }
     }
-
-    // Overflow: Set to last value in the table
-    if (i == BNUMTEMPS) raw = bedtemptable[i-1][0];
-
-    return 1023 - raw;
-  #elif defined BED_USES_AD595
-    return celsius * (1024.0 / (5.0 * 100.0) );
+  #elif defined (HEATER_USES_AD595) || defined (BED_USES_AD595)
+    if(source==2)
+        return celsius * 1024 / (500);
+  #elif defined (HEATER_USES_MAX6675) || defined (BED_USES_MAX6675)
+    if(source==3)
+        return celsius * 4;
   #endif
+  return -1;
 }
 
-// Derived from RepRap FiveD extruder::getTemperature()
-// For hot end temperature measurement.
-float analog2temp(int raw) {
-  #ifdef HEATER_USES_THERMISTOR
+int analog2tempu(int raw,const short table[][2], int numtemps, int source) {
+  #if defined (HEATER_USES_THERMISTOR) || defined (BED_USES_THERMISTOR)
+    if(source==1){
     int celsius = 0;
     byte i;
     
     raw = 1023 - raw;
 
-    for (i=1; i<NUMTEMPS; i++)
+    for (i=1; i<numtemps; i++)
     {
-      if (temptable[i][0] > raw)
+      if (table[i][0] > raw)
       {
-        celsius  = temptable[i-1][1] + 
-          (raw - temptable[i-1][0]) * 
-          (temptable[i][1] - temptable[i-1][1]) /
-          (temptable[i][0] - temptable[i-1][0]);
+        celsius  = table[i-1][1] + 
+          (raw - table[i-1][0]) * 
+          (table[i][1] - table[i-1][1]) /
+          (table[i][0] - table[i-1][0]);
 
         break;
       }
     }
 
     // Overflow: Set to last value in the table
-    if (i == NUMTEMPS) celsius = temptable[i-1][1];
+    if (i == numtemps) celsius = table[i-1][1];
 
     return celsius;
-  #elif defined HEATER_USES_AD595
-    return raw * ((5.0 * 100.0) / 1024.0);
-  #elif defined HEATER_USES_MAX6675
-    return raw * 0.25;
-  #endif
-}
-
-// Derived from RepRap FiveD extruder::getTemperature()
-// For bed temperature measurement.
-float analog2tempBed(int raw) {
-  #ifdef BED_USES_THERMISTOR
-    int celsius = 0;
-    byte i;
-
-    raw = 1023 - raw;
-
-    for (i=1; i<NUMTEMPS; i++)
-    {
-      if (bedtemptable[i][0] > raw)
-      {
-        celsius  = bedtemptable[i-1][1] + 
-          (raw - bedtemptable[i-1][0]) * 
-          (bedtemptable[i][1] - bedtemptable[i-1][1]) /
-          (bedtemptable[i][0] - bedtemptable[i-1][0]);
-
-        break;
-      }
     }
-
-    // Overflow: Set to last value in the table
-    if (i == NUMTEMPS) celsius = bedtemptable[i-1][1];
-
-    return celsius;
-    
-  #elif defined BED_USES_AD595
-    return raw * ((5.0 * 100.0) / 1024.0);
+  #elif defined (HEATER_USES_AD595) || defined (BED_USES_AD595)
+    if(source==2)
+        return raw * 500 / 1024;
+  #elif defined (HEATER_USES_MAX6675) || defined (BED_USES_MAX6675)
+    if(source==3)
+        return raw / 4;
   #endif
+  return -1;
 }
+
 
 inline void kill()
 {
   #if TEMP_0_PIN > -1
   target_raw=0;
-  digitalWrite(HEATER_0_PIN,LOW);
+  WRITE(HEATER_0_PIN,LOW);
   #endif
   #if TEMP_1_PIN > -1
   target_bed_raw=0;
-  if(HEATER_1_PIN > -1) digitalWrite(HEATER_1_PIN,LOW);
+  if(HEATER_1_PIN > -1) WRITE(HEATER_1_PIN,LOW);
   #endif
   disable_x();
   disable_y();

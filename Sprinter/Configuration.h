@@ -24,11 +24,16 @@
 float axis_steps_per_unit[] = {80, 80, 3200/1.25,700}; 
 // Metric Prusa Mendel with Makergear geared stepper extruder:
 //float axis_steps_per_unit[] = {80,80,3200/1.25,1380}; 
+// MakerGear Hybrid Prusa Mendel:
+// Z axis value is for .9 stepper(if you have 1.8 steppers for Z, you need to use 2272.7272)
+//float axis_steps_per_unit[] = {104.987, 104.987, 4545.4544, 1487};
 
 //// Endstop Settings
 #define ENDSTOPPULLUPS 1 // Comment this out (using // at the start of the line) to disable the endstop pullup resistors
 // The pullups are needed if you directly connect a mechanical endswitch between the signal and ground pins.
 const bool ENDSTOPS_INVERTING = false; //set to true to invert the logic of the endstops
+//If your axes are only moving in one direction, make sure the endstops are connected properly.
+//If your axes move in one direction ONLY when the endstops are triggered, set ENDSTOPS_INVERTING to true here
 
 // This determines the communication speed of the printer
 #define BAUDRATE 115200
@@ -42,10 +47,10 @@ const bool ENDSTOPS_INVERTING = false; //set to true to invert the logic of the 
 #include "thermistortables.h"
 
 // For Inverting Stepper Enable Pins (Active Low) use 0, Non Inverting (Active High) use 1
-const bool X_ENABLE_ON = 0;
-const bool Y_ENABLE_ON = 0;
-const bool Z_ENABLE_ON = 0;
-const bool E_ENABLE_ON = 0;
+#define X_ENABLE_ON 0
+#define Y_ENABLE_ON 0
+#define Z_ENABLE_ON 0
+#define E_ENABLE_ON 0
 
 // Disables axis when it's not being used.
 const bool DISABLE_X = false;
@@ -61,9 +66,9 @@ const bool INVERT_E_DIR = false;
 
 //// ENDSTOP SETTINGS:
 // Sets direction of endstops when homing; 1=MAX, -1=MIN
-const int X_HOME_DIR = -1;
-const int Y_HOME_DIR = -1;
-const int Z_HOME_DIR = -1;
+#define X_HOME_DIR -1
+#define Y_HOME_DIR -1
+#define Z_HOME_DIR -1
 
 const bool min_software_endstops = false; //If true, axis won't move to coordinates less than zero.
 const bool max_software_endstops = true;  //If true, axis won't move to coordinates greater than the defined lengths below.
@@ -74,6 +79,7 @@ const int Z_MAX_LENGTH = 100;
 //// MOVEMENT SETTINGS
 const int NUM_AXIS = 4; // The axis order in all axis related arrays is X, Y, Z, E
 float max_feedrate[] = {200000, 200000, 240, 500000};
+float homing_feedrate[] = {1500,1500,120};
 bool axis_relative_modes[] = {false, false, false, false};
 
 // Min step delay in microseconds. If you are experiencing missing steps, try to raise the delay microseconds, but be aware this
@@ -94,6 +100,12 @@ float max_start_speed_units_per_second[] = {25.0,25.0,0.2,10.0};
 long max_acceleration_units_per_sq_second[] = {1000,1000,50,10000}; // X, Y, Z and E max acceleration in mm/s^2 for printing moves or retracts
 long max_travel_acceleration_units_per_sq_second[] = {500,500,50,500}; // X, Y, Z max acceleration in mm/s^2 for travel moves
 #endif
+
+// Machine UUID
+// This may be useful if you have multiple machines and wish to identify them by using the M115 command. 
+// By default we set it to zeros.
+char uuid[] = "00000000-0000-0000-0000-000000000000";
+
 
 //// AD595 THERMOCOUPLE SUPPORT UNTESTED... USE WITH CAUTION!!!!
 
@@ -130,6 +142,9 @@ long max_travel_acceleration_units_per_sq_second[] = {500,500,50,500}; // X, Y, 
 // The watchdog waits for the watchperiod in milliseconds whenever an M104 or M109 increases the target temperature
 // If the temperature has not increased at the end of that period, the target temperature is set to zero. It can be reset with another M104/M109
 //#define WATCHPERIOD 5000 //5 seconds
+
+// Wait this long after achieving target temperature on M109 before continuing with print (seconds)
+//#define TEMP_RESIDENCY_TIME 20
 
 //// The minimal temperature defines the temperature below which the heater will not be enabled
 #define MINTEMP 5
