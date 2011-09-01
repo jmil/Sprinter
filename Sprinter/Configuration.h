@@ -21,8 +21,9 @@
 
 //// Calibration variables
 // X, Y, Z, E steps per unit - Metric Prusa Mendel with Wade extruder:
-//float axis_steps_per_unit[] = {80, 20, 421.0526315789, (200/(6.5*3.14159)*(43/10))};    OLD
-float axis_steps_per_unit[] = {80, 20, 421.0526315789, 43.33333333333333};
+//float axis_steps_per_unit[] = {80, 20, 421.0526315789, (200/(6.5*3.14159)*(43/10))};    OLD 2
+//float axis_steps_per_unit[] = {80, 20, 421.0526315789, 43.33333333333333};  old 1
+float axis_steps_per_unit[] = {80, 20, 421.0526315789, (200/(6.8*3.14159)*(43/10))}; 
 // Metric Prusa Mendel with Makergear geared stepper extruder:
 //float axis_steps_per_unit[] = {80,80,3200/1.25,1380}; 
 // MakerGear Hybrid Prusa Mendel:
